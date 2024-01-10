@@ -47,7 +47,7 @@ public Plugin myinfo =
 	name = "PointServerCommandFilter",
 	author = "BotoX",
 	description = "Filters point_servercommand->Command() using user-defined rules to restrict maps.",
-	version = "1.1",
+	version = "1.1.1",
 	url = ""
 };
 
@@ -81,7 +81,10 @@ public void OnPluginStart()
 	{
 		OnEntityCreated(entity, "point_servercommand");
 	}
+}
 
+public void OnMapStart()
+{
 	LoadConfig();
 }
 
