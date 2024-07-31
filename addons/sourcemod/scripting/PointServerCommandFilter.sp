@@ -47,7 +47,7 @@ public Plugin myinfo =
 	name = "PointServerCommandFilter",
 	author = "BotoX",
 	description = "Filters point_servercommand->Command() using user-defined rules to restrict maps.",
-	version = "1.1.1",
+	version = "1.1.2",
 	url = ""
 };
 
@@ -153,7 +153,7 @@ public MRESReturn AcceptInput(int pThis, Handle hReturn, Handle hParams)
 		DHookSetReturn(hReturn, false);
 		return MRES_Supercede;
 	}
-	else if(iAction == Plugin_Changed || GetEngineVersion() == Engine_CSGO || bReplaced)
+	else if(iAction == Plugin_Changed || bReplaced)
 	{
 		ServerCommand(sCommand);
 		DHookSetReturn(hReturn, true);
