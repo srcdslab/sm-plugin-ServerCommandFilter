@@ -4,6 +4,7 @@
 #include <cstrike>
 #include <regex>
 #include <dhooks>
+#include <utilshelper>
 #pragma newdecls required
 
 #define COMMAND_SIZE 1024
@@ -47,7 +48,7 @@ public Plugin myinfo =
 	name = "PointServerCommandFilter",
 	author = "BotoX",
 	description = "Filters point_servercommand->Command() using user-defined rules to restrict maps.",
-	version = "1.1.2",
+	version = "1.1.3",
 	url = ""
 };
 
@@ -179,8 +180,8 @@ Action PointServerCommandForward(char[] sOrigCommand)
 	TrimString(sCommandLeft);
 	strcopy(sCommandRight, sizeof(sCommandRight), sCommandRight[Split]);
 
-	StringToLower(sCommandLeft);
-	StringToLower(sCommandRight);
+	StringToLowerCase(sCommandLeft);
+	StringToLowerCase(sCommandRight);
 
 	ArrayList RuleList;
 	if(g_Rules.GetValue(sCommandLeft, RuleList))
@@ -412,7 +413,7 @@ void LoadConfig()
 	{
 		static char sLeft[128];
 		Config.GetSectionName(sLeft, sizeof(sLeft));
-		StringToLower(sLeft);
+		StringToLowerCase(sLeft);
 		int LeftLen = strlen(sLeft);
 
 		ArrayList RuleList;
@@ -566,7 +567,7 @@ bool ParseRule(KeyValues Config, const char[] sLeft, int Mode, StringMap Rule)
 		}
 		else
 		{
-			StringToLower(sValue);
+			StringToLowerCase(sValue);
 			Rule.SetValue("mode", Mode | MODE_STRVALUE);
 			Rule.SetString("value", sValue);
 		}
@@ -614,8 +615,3 @@ public int SortRuleList(int index1, int index2, Handle array, Handle hndl)
 	return 0;
 }
 
-stock void StringToLower(char[] Str)
-{
-	for(int i = 0; Str[i]; i++)
-		Str[i] = CharToLower(Str[i]);
-}
