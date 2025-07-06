@@ -5,5 +5,6 @@
 
 > [!IMPORTANT]
 > Upgrade from 1.x to 2.x introduce a config change in sourcemod/configs.
-> Rename: PointServerCommandFilter.cfg -> PointServerCommandFilter.cfg
-> Update the KeyValue inside your new PointServerCommandFilter.cfg "PointServerCommandFilter" -> "ServerCommandFilter"
+
+- Rename: PointServerCommandFilter.cfg -> ServerCommandFilter.cfg
+- Update the KeyValue inside your new PointServerCommandFilter.cfg "PointServerCommandFilter" -> "ServerCommandFilter"
