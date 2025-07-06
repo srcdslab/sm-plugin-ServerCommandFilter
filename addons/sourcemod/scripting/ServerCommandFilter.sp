@@ -12,6 +12,14 @@
 // bool CBaseEntity::AcceptInput( const char *szInputName, CBaseEntity *pActivator, CBaseEntity *pCaller, variant_t Value, int outputID )
 Handle g_hAcceptInput;
 
+// ScriptVariant_t field types (from debug)
+#define FIELD_FLOAT         1
+#define FIELD_INTEGER       5
+#define FIELD_CSTRING       30
+
+DHookSetup g_hSetValueDtr;
+DHookSetup g_hSendToServerConsoleDtr;
+
 ConVar g_cvVerboseLog;
 int g_iVerboseLog;
 
@@ -45,11 +53,11 @@ enum
 
 public Plugin myinfo =
 {
-	name = "PointServerCommandFilter",
-	author = "BotoX",
-	description = "Filters point_servercommand->Command() using user-defined rules to restrict maps.",
-	version = "1.1.3",
-	url = ""
+	name = "ServerCommandFilter",
+	author = "BotoX, .Rushaway, koen",
+	description = "Filters server commands using user-defined rules for maps (point_servercommand/VScript)",
+	version = "1.2.0",
+	url = "https://github.com/srcdslab/sm-plugin-ServerCommandFilter"
 };
 
 public void OnPluginStart()
@@ -61,10 +69,25 @@ public void OnPluginStart()
 		return;
 	}
 
-	g_cvVerboseLog = CreateConVar("sm_pscf_verbose", "2", "Verbosity level of logs \n0 = No logs \n1 = Denied: No rules/match \n2 = Denied: No rules/match + Clamped \n3 = Logs everything", _, true, 0.0, true, 3.0);
+	g_cvVerboseLog = CreateConVar("sm_scf_verbose", "2", "Verbosity level of logs \n0 = No logs \n1 = Denied: No rules/match \n2 = Denied: No rules/match + Clamped \n3 = Logs everything", _, true, 0.0, true, 3.0);
 	HookConVarChange(g_cvVerboseLog, OnConVarChanged);
 
 	AutoExecConfig(true);
+
+	// Gamedata only supports CS:S for now
+	EngineVersion iEngine = GetEngineVersion();
+	if (iEngine == Engine_CSS)
+	{
+		GameData gd = new GameData("ServerCommandFilter.games");
+		if (gd == null) {
+			SetFailState("Gamedata file not found or failed to load!");
+			return;
+		}
+
+		Generate_SetValueDetour(gd);
+		Generate_SendToSvDetour(gd);
+		delete gd;
+	}
 
 	int Offset = GameConfGetOffset(hGameConf, "AcceptInput");
 	g_hAcceptInput = DHookCreate(Offset, HookType_Entity, ReturnType_Bool, ThisPointer_CBaseEntity, AcceptInput);
@@ -82,6 +105,55 @@ public void OnPluginStart()
 	{
 		OnEntityCreated(entity, "point_servercommand");
 	}
+}
+
+public void OnPluginEnd()
+{
+	if (g_hSetValueDtr != null)
+	{
+		DHookDisableDetour(g_hSetValueDtr, false, Detour_SetValue);
+		delete g_hSetValueDtr;
+	}
+
+	if (g_hSendToServerConsoleDtr != null)
+	{
+		DHookDisableDetour(g_hSendToServerConsoleDtr, false, Detour_SendToServerConsole);
+		delete g_hSendToServerConsoleDtr;
+	}
+}
+
+void Generate_SetValueDetour(GameData gd)
+{
+	g_hSetValueDtr = DynamicDetour.FromConf(gd, "SetValue");
+	if (g_hSetValueDtr == null) {
+		LogError("Failed to setup \"SetValue\" detour!");
+		return;
+	}
+
+	if (!DHookEnableDetour(g_hSetValueDtr, false, Detour_SetValue)) {
+		LogError("Failed to detour \"SetValue()\" function!");
+		return;
+	}
+
+	LogMessage("Successfully detoured \"SetValue()\" function!");
+}
+
+void Generate_SendToSvDetour(GameData gd)
+{
+	g_hSendToServerConsoleDtr = DynamicDetour.FromConf(gd, "SendToServerConsole");
+	if (g_hSendToServerConsoleDtr == null)
+	{
+		LogError("Failed to setup \"SendToServerConsole\" detour!");
+		return;
+	}
+
+	if (!DHookEnableDetour(g_hSendToServerConsoleDtr, false, Detour_SendToServerConsole))
+	{
+		LogError("Failed to detour \"SendToServerConsole()\" function!");
+		return;
+	}
+
+	LogMessage("Successfully detoured \"SendToServerConsole()\" function!");
 }
 
 public void OnMapStart()
@@ -147,7 +219,7 @@ public MRESReturn AcceptInput(int pThis, Handle hReturn, Handle hParams)
 		bReplaced += ReplaceString(sCommand, sizeof(sCommand), "!activator", sUserID, false);
 	}
 
-	Action iAction = PointServerCommandForward(sCommand);
+	Action iAction = ValidateCommand(sCommand, "point_servercommand");
 
 	if(iAction == Plugin_Stop)
 	{
@@ -164,7 +236,14 @@ public MRESReturn AcceptInput(int pThis, Handle hReturn, Handle hParams)
 	return MRES_Ignored;
 }
 
-Action PointServerCommandForward(char[] sOrigCommand)
+
+/**
+ * Generic validation function that can be used by both AcceptInput and SetValue
+ * @param sOrigCommand    The command to validate
+ * @param sSource         Source identifier for logging (e.g., "point_servercommand", "SetValue")
+ * @return                Plugin_Continue if allowed, Plugin_Stop if blocked, Plugin_Changed if modified
+ */
+Action ValidateCommand(char[] sOrigCommand, const char[] sSource)
 {
 	static char sCommandRight[1024];
 	static char sCommandLeft[128];
@@ -185,7 +264,7 @@ Action PointServerCommandForward(char[] sOrigCommand)
 
 	ArrayList RuleList;
 	if(g_Rules.GetValue(sCommandLeft, RuleList))
-		return MatchRuleList(RuleList, sOrigCommand, sCommandLeft, sCommandRight);
+		return MatchRuleList(RuleList, sOrigCommand, sCommandLeft, sCommandRight, sSource);
 
 	for(int i = 0; i < g_Regexes.Length; i++)
 	{
@@ -193,17 +272,16 @@ Action PointServerCommandForward(char[] sOrigCommand)
 		if(MatchRegex(hRegex, sCommandLeft) > 0)
 		{
 			RuleList = g_RegexRules.Get(i);
-			return MatchRuleList(RuleList, sOrigCommand, sCommandLeft, sCommandRight);
+			return MatchRuleList(RuleList, sOrigCommand, sCommandLeft, sCommandRight, sSource);
 		}
 	}
 
-	if (g_iVerboseLog >= 1)
-		LogMessage("Blocked (No Rule): \"%s\"", sOrigCommand);
+	LogValidationResult(sSource, sOrigCommand, "Blocked (No Rule)", 1);
 
 	return Plugin_Stop;
 }
 
-Action MatchRuleList(ArrayList RuleList, char[] sOrigCommand, const char[] sCommandLeft, const char[] sCommandRight)
+Action MatchRuleList(ArrayList RuleList, char[] sOrigCommand, const char[] sCommandLeft, const char[] sCommandRight, const char[] sSource)
 {
 	for(int r = 0; r < RuleList.Length; r++)
 	{
@@ -278,8 +356,7 @@ Action MatchRuleList(ArrayList RuleList, char[] sOrigCommand, const char[] sComm
 		// Reverse mode
 		if(Mode & MODE_DENY && State & STATE_ALLOW && !(State & STATE_DENY))
 		{
-			if (g_iVerboseLog >= 1)
-				LogMessage("Blocked (Deny): \"%s\"", sOrigCommand);
+			LogValidationResult(sSource, sOrigCommand, "Blocked (Deny)", 1);
 			return Plugin_Stop;
 		}
 
@@ -304,35 +381,30 @@ Action MatchRuleList(ArrayList RuleList, char[] sOrigCommand, const char[] sComm
 			}
 			if(Clamp)
 			{
-				if (g_iVerboseLog >= 3)
-					LogMessage("Clamped (%f -> %f): \"%s\"", IsValue, ClampValue, sOrigCommand);
+				LogClampedValue(sSource, sOrigCommand, IsValue, ClampValue);
 				FormatEx(sOrigCommand, COMMAND_SIZE, "%s %f", sCommandLeft, ClampValue);
 				return Plugin_Changed;
 			}
 			else // Can this even happen? Yesh, dumb user. -> "clamp" {}
 			{
-				if (g_iVerboseLog >= 2)
-					LogMessage("Blocked (!Clamp): \"%s\"", sOrigCommand);
+				LogValidationResult(sSource, sOrigCommand, "Blocked (!Clamp)", 2);
 				return Plugin_Stop;
 			}
 		}
 		else if(Mode & MODE_CLAMP && State & STATE_ALLOW)
 		{
-			if (g_iVerboseLog >= 3)
-				LogMessage("Allowed (Clamp): \"%s\"", sOrigCommand);
+			LogValidationResult(sSource, sOrigCommand, "Allowed (Clamp)", 3);
 			return Plugin_Continue;
 		}
 
 		if(Mode & MODE_ALLOW && State & STATE_ALLOW && !(State & STATE_DENY))
 		{
-			if (g_iVerboseLog >= 3)
-				LogMessage("Allowed (Allow): \"%s\"", sOrigCommand);
+			LogValidationResult(sSource, sOrigCommand, "Allowed (Allow)", 3);
 			return Plugin_Continue;
 		}
 	}
 
-	if (g_iVerboseLog >= 1)
-		LogMessage("Blocked (No Match): \"%s\"", sOrigCommand);
+	LogValidationResult(sSource, sOrigCommand, "Blocked (No Match)", 1);
 	return Plugin_Stop;
 }
 
@@ -388,11 +460,11 @@ void LoadConfig()
 		Cleanup();
 
 	static char sConfigFile[PLATFORM_MAX_PATH];
-	BuildPath(Path_SM, sConfigFile, sizeof(sConfigFile), "configs/PointServerCommandFilter.cfg");
+	BuildPath(Path_SM, sConfigFile, sizeof(sConfigFile), "configs/ServerCommandFilter.cfg");
 	if(!FileExists(sConfigFile))
 		SetFailState("Could not find config: \"%s\"", sConfigFile);
 
-	KeyValues Config = new KeyValues("PointServerCommandFilter");
+	KeyValues Config = new KeyValues("ServerCommandFilter");
 	if(!Config.ImportFromFile(sConfigFile))
 	{
 		delete Config;
@@ -421,13 +493,9 @@ void LoadConfig()
 		if(sLeft[0] == '/' && sLeft[LeftLen - 1] == '/')
 		{
 			sLeft[LeftLen - 1] = 0;
-			Regex hRegex;
-			static char sError[512];
-			hRegex = CompileRegex(sLeft[1], PCRE_CASELESS, sError, sizeof(sError));
+			Regex hRegex = CompileRegexWithError(sLeft[1], sLeft);
 			if(hRegex == INVALID_HANDLE)
 			{
-				LogError("Regex error from %s", sLeft);
-				LogError(sError);
 				continue;
 			}
 			else
@@ -550,13 +618,9 @@ bool ParseRule(KeyValues Config, const char[] sLeft, int Mode, StringMap Rule)
 		if(sValue[0] == '/' && sValue[ValueLen - 1] == '/')
 		{
 			sValue[ValueLen - 1] = 0;
-			Regex hRegex;
-			static char sError[512];
-			hRegex = CompileRegex(sValue[1], PCRE_CASELESS, sError, sizeof(sError));
+			Regex hRegex = CompileRegexWithError(sValue[1], sLeft);
 			if(hRegex == INVALID_HANDLE)
 			{
-				LogError("Regex error in %s from %s", sLeft, sValue[1]);
-				LogError(sError);
 				return false;
 			}
 			else
@@ -615,3 +679,154 @@ public int SortRuleList(int index1, int index2, Handle array, Handle hndl)
 	return 0;
 }
 
+/**
+* Generic action handler for validation results
+* @param iAction    Action returned by ValidateCommand
+* @param sCommand   The command to execute if changed
+* @return           MRES_Supercede to block, MRES_Ignored to continue
+*/
+MRESReturn HandleValidationAction(Action iAction, const char[] sCommand)
+{
+	if (iAction == Plugin_Stop)
+	{
+		return MRES_Supercede;
+	}
+	else if(iAction == Plugin_Changed)
+	{
+		// To avoid memory manipulation, better execute the command clamped
+		ServerCommand(sCommand);
+		return MRES_Supercede;
+	}
+
+	return MRES_Ignored;
+}
+
+/**
+* Detour callback for CScriptConvarAccessor::SetValue
+* From https://developer.valvesoftware.com/wiki/Team_Fortress_2/Scripting/Script_Functions
+* 
+* Original C++ signature:
+* void CScriptConvarAccessor::SetValue(const char *cvar, ScriptVariant_t value)
+* 
+* Compiled signature (with implicit 'this' pointer):
+* CScriptConvarAccessor::SetValue(this*, const char*, ScriptVariant_t)
+* 
+* @param hParams   DHooks parameter handle
+* @return          MRES_Handled to block original execution, MRES_Ignored to continue
+*/
+public MRESReturn Detour_SetValue(DHookParam hParams)
+{
+	char szCvar[128];
+	hParams.GetString(1, szCvar, sizeof(szCvar));
+
+	Address pVariant = hParams.GetAddress(2);
+	if (pVariant == Address_Null)
+		return MRES_Ignored;
+
+	int iType = LoadFromAddress(pVariant + view_as<Address>(8), NumberType_Int16);
+	int iRawValue = LoadFromAddress(pVariant, NumberType_Int32);
+
+	char sCommand[COMMAND_SIZE];
+	switch(iType)
+	{
+		case FIELD_INTEGER:
+		{
+			FormatEx(sCommand, sizeof(sCommand), "%s %d", szCvar, iRawValue);
+		}
+		case FIELD_FLOAT:
+		{
+			float fValue = view_as<float>(iRawValue);
+			FormatEx(sCommand, sizeof(sCommand), "%s %f", szCvar, fValue);
+		}
+		case FIELD_CSTRING:
+		{
+			if (iRawValue == 0)
+				return MRES_Ignored; // Null string
+
+			char szStringValue[256];
+			Address pString = view_as<Address>(iRawValue);
+
+			bool bSuccess = false;
+			for (int i = 0; i < sizeof(szStringValue) - 1; i++)
+			{
+				int iByte = LoadFromAddress(pString + view_as<Address>(i), NumberType_Int8);
+				if (iByte == 0)
+				{
+					szStringValue[i] = '\0';
+					bSuccess = true;
+					break;
+				}
+				if (iByte < 32 || iByte > 126)
+				{
+					szStringValue[i] = '\0';
+					break;
+				}
+				szStringValue[i] = iByte;
+			}
+			szStringValue[sizeof(szStringValue) - 1] = '\0';
+
+			if (!bSuccess || strlen(szStringValue) == 0)
+			{
+				return MRES_Ignored; // Invalid string
+			}
+
+			FormatEx(sCommand, sizeof(sCommand), "%s %s", szCvar, szStringValue);
+		}
+		default:
+		{
+			return MRES_Ignored; // Unknown type
+		}
+	}
+
+	// Validate the command using the same system as AcceptInput
+	Action iAction = ValidateCommand(sCommand, "SetValue");
+
+	return HandleValidationAction(iAction, sCommand);
+}
+
+/**
+* Detour callback for SendToServerConsole
+* 
+* Original C++ signature:
+* static void SendToServerConsole(const char *pszCommand)
+* 
+* This function is called when VScript executes SendToConsole() to run server commands
+* 
+* @param hParams   DHooks parameter handle
+* @return          MRES_Ignored to allow command execution, MRES_Supercede to block
+*/
+public MRESReturn Detour_SendToServerConsole(DHookParam hParams)
+{
+	char szCommand[512];
+	hParams.GetString(1, szCommand, sizeof(szCommand));
+	StringToLowerCase(szCommand);
+
+	Action iAction = ValidateCommand(szCommand, "SendToServerConsole");
+
+	return HandleValidationAction(iAction, szCommand);
+}
+
+stock void LogValidationResult(const char[] sSource, const char[] sCommand, const char[] sReason, int minLevel = 1)
+{
+	if (g_iVerboseLog >= minLevel)
+		LogMessage("[%s] %s: \"%s\"", sSource, sReason, sCommand);
+}
+
+stock void LogClampedValue(const char[] sSource, const char[] sCommand, float oldValue, float newValue)
+{
+	if (g_iVerboseLog >= 3)
+		LogMessage("[%s] Clamped (%f -> %f): \"%s\"", sSource, oldValue, newValue, sCommand);
+}
+
+Regex CompileRegexWithError(const char[] pattern, const char[] context)
+{
+	Regex hRegex;
+	static char sError[512];
+	hRegex = CompileRegex(pattern, PCRE_CASELESS, sError, sizeof(sError));
+	if(hRegex == INVALID_HANDLE)
+	{
+		LogError("Regex error in %s from %s", context, pattern);
+		LogError(sError);
+	}
+	return hRegex;
+}

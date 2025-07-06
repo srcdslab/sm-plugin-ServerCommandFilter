@@ -1,0 +1,53 @@
+"Games"
+{
+    "cstrike"
+    {
+        "Signatures"
+        {
+            "SendToServerConsole"
+            {
+                "library"       "server"
+                "linux"         "@_ZL19SendToServerConsolePKc"
+                "windows"       "\x55\x8B\xEC\x8B\x4D\x08\x85\xC9\x74\x2A\x83\x3D\x2A\x2A\x2A\x2A\x02"
+            }
+            "SetValue"
+            {
+                "library"       "server"
+                "linux"         "@_ZN21CScriptConvarAccessor8SetValueEPKc12CVariantBaseI24CVariantDefaultAllocatorE"
+            }
+        }
+        "Functions"
+        {
+            "SendToServerConsole"
+            {
+                "signature"     "SendToServerConsole"
+                "callconv"      "cdecl"
+                "return"        "void"
+                "arguments"
+                {
+                    "command"
+                    {
+                        "type"  "charptr"
+                    }
+                }
+            }
+            "SetValue"
+            {
+                "signature"     "SetValue"
+                "callconv"      "thiscall"
+                "return"        "void"
+                "arguments"
+                {
+                    "cvar"
+                    {
+                        "type"  "charptr"
+                    }
+                    "value"
+                    {
+                        "type"  "objectptr"
+                    }
+                }
+            }
+        }
+    }
+}
