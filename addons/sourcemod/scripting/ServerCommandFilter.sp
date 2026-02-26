@@ -56,7 +56,7 @@ public Plugin myinfo =
 	name = "ServerCommandFilter",
 	author = "BotoX, .Rushaway, koen",
 	description = "Filters server commands using user-defined rules for maps (point_servercommand/VScript)",
-	version = "1.2.0",
+	version = "1.3.0",
 	url = "https://github.com/srcdslab/sm-plugin-ServerCommandFilter"
 };
 
@@ -188,6 +188,7 @@ public MRESReturn AcceptInput(int pThis, Handle hReturn, Handle hParams)
 	if(!StrEqual(szInputName, "Command", true))
 		return MRES_Ignored;
 
+	int bReplaced = 0;
 	int client = 0;
 	if(!DHookIsNullParam(hParams, 2))
 		client = DHookGetParam(hParams, 2);
@@ -195,28 +196,45 @@ public MRESReturn AcceptInput(int pThis, Handle hReturn, Handle hParams)
 	char sCommand[COMMAND_SIZE];
 	DHookGetParamObjectPtrString(hParams, 4, 0, ObjectValueType_String, sCommand, sizeof(sCommand));
 
-	int bReplaced = 0;
+	if (SanitizeSayCommand(sCommand, sizeof(sCommand)))
+		bReplaced = 1;
+
 	if(client > 0 && client <= MaxClients && IsClientInGame(client))
 	{
-		char sName[MAX_NAME_LENGTH];
-		GetClientName(client, sName, sizeof(sName));
+		if (StrContains(sCommand, "!activator") != -1)
+		{
+			if (StrContains(sCommand, "!activator.name") != -1)
+			{
+				char sName[MAX_NAME_LENGTH];
+				GetClientName(client, sName, sizeof(sName));
+				SanitizePlayerName(sName, sizeof(sName));
+				bReplaced += ReplaceString(sCommand, sizeof(sCommand), "!activator.name", sName, false);
+			}
 
-		char sSteamId[32];
-		GetClientAuthId(client, AuthId_Engine, sSteamId, sizeof(sSteamId));
+			if (StrContains(sCommand, "!activator.steamid") != -1)
+			{
+				char sSteamId[32];
+				GetClientAuthId(client, AuthId_Engine, sSteamId, sizeof(sSteamId));
+				bReplaced += ReplaceString(sCommand, sizeof(sCommand), "!activator.steamid", sSteamId, false);
+			}
 
-		char sUserID[32];
-		FormatEx(sUserID, sizeof(sUserID), "#%d", GetClientUserId(client));
+			if (StrContains(sCommand, "!activator.team") != -1)
+			{
+				char sTeam[32];
+				int iTeam = GetClientTeam(client);
+				if(iTeam == CS_TEAM_CT)
+					strcopy(sTeam, sizeof(sTeam), "@ct");
+				else if(iTeam == CS_TEAM_T)
+					strcopy(sTeam, sizeof(sTeam), "@t");
+				else strcopy(sTeam, sizeof(sTeam), "@spec");
+				
+				bReplaced += ReplaceString(sCommand, sizeof(sCommand), "!activator.team", sTeam, false);
+			}
 
-		char sTeam[32];
-		if(GetClientTeam(client) == CS_TEAM_CT)
-			strcopy(sTeam, sizeof(sTeam), "@ct");
-		else if(GetClientTeam(client) == CS_TEAM_T)
-			strcopy(sTeam, sizeof(sTeam), "@t");
-
-		bReplaced += ReplaceString(sCommand, sizeof(sCommand), "!activator.name", sName, false);
-		bReplaced += ReplaceString(sCommand, sizeof(sCommand), "!activator.steamid", sSteamId, false);
-		bReplaced += ReplaceString(sCommand, sizeof(sCommand), "!activator.team", sTeam, false);
-		bReplaced += ReplaceString(sCommand, sizeof(sCommand), "!activator", sUserID, false);
+			char sUserID[32];
+			FormatEx(sUserID, sizeof(sUserID), "#%d", GetClientUserId(client));
+			bReplaced += ReplaceString(sCommand, sizeof(sCommand), "!activator", sUserID, false);
+		}
 	}
 
 	Action iAction = ValidateCommand(sCommand, "point_servercommand");
@@ -228,7 +246,7 @@ public MRESReturn AcceptInput(int pThis, Handle hReturn, Handle hParams)
 	}
 	else if(iAction == Plugin_Changed || bReplaced)
 	{
-		ServerCommand(sCommand);
+		ServerCommand("%s", sCommand);
 		DHookSetReturn(hReturn, true);
 		return MRES_Supercede;
 	}
@@ -236,6 +254,31 @@ public MRESReturn AcceptInput(int pThis, Handle hReturn, Handle hParams)
 	return MRES_Ignored;
 }
 
+/**
+ * Sanitizes "say" and "say_team" commands to prevent command injection via player names.
+ * Returns true if the command was modified.
+ */
+bool SanitizeSayCommand(char[] sCommand, int maxlen)
+{
+	// Only sanitize chat commands
+	if (strncmp(sCommand, "say ", 4, false) != 0 && strncmp(sCommand, "say_team ", 9, false) != 0)
+		return false;
+
+	return SanitizePlayerName(sCommand, maxlen);
+}
+
+/**
+ * Sanitizes a player name to prevent command injection.
+ */
+bool SanitizePlayerName(char[] sName, int maxlen)
+{
+	bool bChanged = false;
+	bChanged |= ReplaceString(sName, maxlen, ";",  " ", false) > 0;
+	bChanged |= ReplaceString(sName, maxlen, "\"", "",  false) > 0;
+	bChanged |= ReplaceString(sName, maxlen, "\n", " ", false) > 0;
+	bChanged |= ReplaceString(sName, maxlen, "\r", " ", false) > 0;
+	return bChanged;
+}
 
 /**
  * Generic validation function that can be used by both AcceptInput and SetValue
