@@ -56,14 +56,14 @@ public Plugin myinfo =
 	name = "ServerCommandFilter",
 	author = "BotoX, .Rushaway, koen",
 	description = "Filters server commands using user-defined rules for maps (point_servercommand/VScript)",
-	version = "1.3.0",
+	version = "1.3.1",
 	url = "https://github.com/srcdslab/sm-plugin-ServerCommandFilter"
 };
 
 public void OnPluginStart()
 {
 	Handle hGameConf = LoadGameConfigFile("sdktools.games");
-	if(hGameConf == INVALID_HANDLE)
+	if (hGameConf == INVALID_HANDLE)
 	{
 		SetFailState("Couldn't load sdktools game config!");
 		return;
@@ -101,7 +101,7 @@ public void OnPluginStart()
 
 	/* Late Load */
 	int entity = INVALID_ENT_REFERENCE;
-	while((entity = FindEntityByClassname(entity, "point_servercommand")) != INVALID_ENT_REFERENCE)
+	while ((entity = FindEntityByClassname(entity, "point_servercommand")) != INVALID_ENT_REFERENCE)
 	{
 		OnEntityCreated(entity, "point_servercommand");
 	}
@@ -173,7 +173,7 @@ void OnConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue
 
 public void OnEntityCreated(int entity, const char[] classname)
 {
-	if(StrEqual(classname, "point_servercommand"))
+	if (StrEqual(classname, "point_servercommand"))
 	{
 		DHookEntity(g_hAcceptInput, false, entity);
 	}
@@ -185,12 +185,12 @@ public MRESReturn AcceptInput(int pThis, Handle hReturn, Handle hParams)
 	char szInputName[128];
 	DHookGetParamString(hParams, 1, szInputName, sizeof(szInputName));
 
-	if(!StrEqual(szInputName, "Command", true))
+	if (!StrEqual(szInputName, "Command", true))
 		return MRES_Ignored;
 
 	int bReplaced = 0;
 	int client = 0;
-	if(!DHookIsNullParam(hParams, 2))
+	if (!DHookIsNullParam(hParams, 2))
 		client = DHookGetParam(hParams, 2);
 
 	char sCommand[COMMAND_SIZE];
@@ -199,7 +199,7 @@ public MRESReturn AcceptInput(int pThis, Handle hReturn, Handle hParams)
 	if (SanitizeSayCommand(sCommand, sizeof(sCommand)))
 		bReplaced = 1;
 
-	if(client > 0 && client <= MaxClients && IsClientInGame(client))
+	if (client > 0 && client <= MaxClients && IsClientInGame(client))
 	{
 		if (StrContains(sCommand, "!activator") != -1)
 		{
@@ -222,9 +222,9 @@ public MRESReturn AcceptInput(int pThis, Handle hReturn, Handle hParams)
 			{
 				char sTeam[32];
 				int iTeam = GetClientTeam(client);
-				if(iTeam == CS_TEAM_CT)
+				if (iTeam == CS_TEAM_CT)
 					strcopy(sTeam, sizeof(sTeam), "@ct");
-				else if(iTeam == CS_TEAM_T)
+				else if (iTeam == CS_TEAM_T)
 					strcopy(sTeam, sizeof(sTeam), "@t");
 				else strcopy(sTeam, sizeof(sTeam), "@spec");
 				
@@ -239,12 +239,12 @@ public MRESReturn AcceptInput(int pThis, Handle hReturn, Handle hParams)
 
 	Action iAction = ValidateCommand(sCommand, "point_servercommand");
 
-	if(iAction == Plugin_Stop)
+	if (iAction == Plugin_Stop)
 	{
 		DHookSetReturn(hReturn, false);
 		return MRES_Supercede;
 	}
-	else if(iAction == Plugin_Changed || bReplaced)
+	else if (iAction == Plugin_Changed || bReplaced)
 	{
 		ServerCommand("%s", sCommand);
 		DHookSetReturn(hReturn, true);
@@ -294,7 +294,7 @@ Action ValidateCommand(char[] sOrigCommand, const char[] sSource)
 	TrimString(sCommandRight);
 
 	int Split = SplitString(sCommandRight, " ", sCommandLeft, sizeof(sCommandLeft));
-	if(Split == -1)
+	if (Split == -1)
 	{
 		strcopy(sCommandLeft, sizeof(sCommandLeft), sCommandRight);
 		Split = 0;
@@ -306,13 +306,13 @@ Action ValidateCommand(char[] sOrigCommand, const char[] sSource)
 	StringToLowerCase(sCommandRight);
 
 	ArrayList RuleList;
-	if(g_Rules.GetValue(sCommandLeft, RuleList))
+	if (g_Rules.GetValue(sCommandLeft, RuleList))
 		return MatchRuleList(RuleList, sOrigCommand, sCommandLeft, sCommandRight, sSource);
 
-	for(int i = 0; i < g_Regexes.Length; i++)
+	for (int i = 0; i < g_Regexes.Length; i++)
 	{
 		Regex hRegex = g_Regexes.Get(i);
-		if(MatchRegex(hRegex, sCommandLeft) > 0)
+		if (MatchRegex(hRegex, sCommandLeft) > 0)
 		{
 			RuleList = g_RegexRules.Get(i);
 			return MatchRuleList(RuleList, sOrigCommand, sCommandLeft, sCommandRight, sSource);
@@ -326,7 +326,7 @@ Action ValidateCommand(char[] sOrigCommand, const char[] sSource)
 
 Action MatchRuleList(ArrayList RuleList, char[] sOrigCommand, const char[] sCommandLeft, const char[] sCommandRight, const char[] sSource)
 {
-	for(int r = 0; r < RuleList.Length; r++)
+	for (int r = 0; r < RuleList.Length; r++)
 	{
 		int State = STATE_NONE;
 		StringMap Rule = RuleList.Get(r);
@@ -334,70 +334,70 @@ Action MatchRuleList(ArrayList RuleList, char[] sOrigCommand, const char[] sComm
 		Rule.GetValue("mode", Mode);
 		bool IsNumeric = IsCharNumeric(sCommandRight[0]) || (sCommandRight[0] == '-' && IsCharNumeric(sCommandRight[1]));
 
-		if(Mode & MODE_ALL)
+		if (Mode & MODE_ALL)
 			State |= STATE_ALLOW;
-		else if(Mode & MODE_STRVALUE)
+		else if (Mode & MODE_STRVALUE)
 		{
 			static char sValue[512];
 			Rule.GetString("value", sValue, sizeof(sValue));
-			if(strcmp(sCommandRight, sValue) == 0)
+			if (strcmp(sCommandRight, sValue) == 0)
 				State |= STATE_ALLOW;
 		}
-		else if(Mode & MODE_INTVALUE)
+		else if (Mode & MODE_INTVALUE)
 		{
 			int WantValue;
 			int IsValue;
 			Rule.GetValue("value", WantValue);
 			IsValue = StringToInt(sCommandRight);
 
-			if(IsNumeric && WantValue == IsValue)
+			if (IsNumeric && WantValue == IsValue)
 				State |= STATE_ALLOW;
 		}
-		else if(Mode & MODE_FLOATVALUE)
+		else if (Mode & MODE_FLOATVALUE)
 		{
 			float WantValue;
 			float IsValue;
 			Rule.GetValue("value", WantValue);
 			IsValue = StringToFloat(sCommandRight);
 
-			if(IsNumeric && FloatCompare(IsValue, WantValue) == 0)
+			if (IsNumeric && IsValue == WantValue)
 				State |= STATE_ALLOW;
 		}
-		else if(Mode & MODE_REGEXVALUE)
+		else if (Mode & MODE_REGEXVALUE)
 		{
 			Regex hRegex;
 			Rule.GetValue("value", hRegex);
-			if(MatchRegex(hRegex, sCommandRight) > 0)
+			if (MatchRegex(hRegex, sCommandRight) > 0)
 				State |= STATE_ALLOW;
 		}
 
 		float MinValue;
 		float MaxValue;
 		float IsValue = StringToFloat(sCommandRight);
-		if(!IsNumeric && (Mode & MODE_MIN || Mode & MODE_MAX))
+		if (!IsNumeric && (Mode & MODE_MIN || Mode & MODE_MAX))
 			continue; // Ignore non-numerical
 
-		if(Mode & MODE_MIN)
+		if (Mode & MODE_MIN)
 		{
 			Rule.GetValue("minvalue", MinValue);
 
-			if(IsValue >= MinValue)
+			if (IsValue >= MinValue)
 				State |= STATE_ALLOW;
 			else
 				State |= STATE_DENY | STATE_CLAMPMIN;
 		}
-		if(Mode & MODE_MAX)
+		if (Mode & MODE_MAX)
 		{
 			Rule.GetValue("maxvalue", MaxValue);
 
-			if(IsValue <= MaxValue)
+			if (IsValue <= MaxValue)
 				State |= STATE_ALLOW;
 			else
 				State |= STATE_DENY | STATE_CLAMPMAX;
 		}
 
 		// Reverse mode
-		if(Mode & MODE_DENY && State & STATE_ALLOW && !(State & STATE_DENY))
+		if (Mode & MODE_DENY && State & STATE_ALLOW && !(State & STATE_DENY))
 		{
 			LogValidationResult(sSource, sOrigCommand, "Blocked (Deny)", 1);
 			return Plugin_Stop;
@@ -406,23 +406,23 @@ Action MatchRuleList(ArrayList RuleList, char[] sOrigCommand, const char[] sComm
 		// Clamping?
 		// If there is no clamp rule (State == STATE_NONE) try to clamp to "clampvalue"
 		// aka. always clamp to "clampvalue" if there are no rules in clamp mode
-		if(Mode & MODE_CLAMP && (State & STATE_DENY || State == STATE_NONE))
+		if (Mode & MODE_CLAMP && (State & STATE_DENY || State == STATE_NONE))
 		{
 			bool Clamp = false;
 			float ClampValue;
-			if(Rule.GetValue("clampvalue", ClampValue))
+			if (Rule.GetValue("clampvalue", ClampValue))
 				Clamp = true;
-			else if(State & STATE_CLAMPMIN)
+			else if (State & STATE_CLAMPMIN)
 			{
 				ClampValue = MinValue;
 				Clamp = true;
 			}
-			else if(State & STATE_CLAMPMAX)
+			else if (State & STATE_CLAMPMAX)
 			{
 				ClampValue = MaxValue;
 				Clamp = true;
 			}
-			if(Clamp)
+			if (Clamp)
 			{
 				LogClampedValue(sSource, sOrigCommand, IsValue, ClampValue);
 				FormatEx(sOrigCommand, COMMAND_SIZE, "%s %f", sCommandLeft, ClampValue);
@@ -434,13 +434,13 @@ Action MatchRuleList(ArrayList RuleList, char[] sOrigCommand, const char[] sComm
 				return Plugin_Stop;
 			}
 		}
-		else if(Mode & MODE_CLAMP && State & STATE_ALLOW)
+		else if (Mode & MODE_CLAMP && State & STATE_ALLOW)
 		{
 			LogValidationResult(sSource, sOrigCommand, "Allowed (Clamp)", 3);
 			return Plugin_Continue;
 		}
 
-		if(Mode & MODE_ALLOW && State & STATE_ALLOW && !(State & STATE_DENY))
+		if (Mode & MODE_ALLOW && State & STATE_ALLOW && !(State & STATE_DENY))
 		{
 			LogValidationResult(sSource, sOrigCommand, "Allowed (Allow)", 3);
 			return Plugin_Continue;
@@ -453,10 +453,10 @@ Action MatchRuleList(ArrayList RuleList, char[] sOrigCommand, const char[] sComm
 
 void Cleanup()
 {
-	if(!g_Rules)
+	if (!g_Rules)
 		return;
 
-	for(int i = 0; i < g_aRules.Length; i++)
+	for (int i = 0; i < g_aRules.Length; i++)
 	{
 		ArrayList RuleList = g_aRules.Get(i);
 		CleanupRuleList(RuleList);
@@ -464,7 +464,7 @@ void Cleanup()
 	delete g_aRules;
 	delete g_Rules;
 
-	for(int i = 0; i < g_Regexes.Length; i++)
+	for (int i = 0; i < g_Regexes.Length; i++)
 	{
 		Regex hRegex = g_Regexes.Get(i);
 		delete hRegex;
@@ -478,14 +478,14 @@ void Cleanup()
 
 void CleanupRuleList(ArrayList RuleList)
 {
-	for(int j = 0; j < RuleList.Length; j++)
+	for (int j = 0; j < RuleList.Length; j++)
 	{
 		StringMap Rule = RuleList.Get(j);
 
 		int Mode;
-		if(Rule.GetValue("mode", Mode))
+		if (Rule.GetValue("mode", Mode))
 		{
-			if(Mode & MODE_REGEXVALUE)
+			if (Mode & MODE_REGEXVALUE)
 			{
 				Regex hRegex;
 				Rule.GetValue("value", hRegex);
@@ -499,21 +499,21 @@ void CleanupRuleList(ArrayList RuleList)
 
 void LoadConfig()
 {
-	if(g_Rules)
+	if (g_Rules)
 		Cleanup();
 
 	static char sConfigFile[PLATFORM_MAX_PATH];
 	BuildPath(Path_SM, sConfigFile, sizeof(sConfigFile), "configs/ServerCommandFilter.cfg");
-	if(!FileExists(sConfigFile))
+	if (!FileExists(sConfigFile))
 		SetFailState("Could not find config: \"%s\"", sConfigFile);
 
 	KeyValues Config = new KeyValues("ServerCommandFilter");
-	if(!Config.ImportFromFile(sConfigFile))
+	if (!Config.ImportFromFile(sConfigFile))
 	{
 		delete Config;
 		SetFailState("ImportFromFile() failed!");
 	}
-	if(!Config.GotoFirstSubKey(false))
+	if (!Config.GotoFirstSubKey(false))
 	{
 		delete Config;
 		SetFailState("GotoFirstSubKey() failed!");
@@ -533,11 +533,11 @@ void LoadConfig()
 
 		ArrayList RuleList;
 
-		if(sLeft[0] == '/' && sLeft[LeftLen - 1] == '/')
+		if (sLeft[0] == '/' && sLeft[LeftLen - 1] == '/')
 		{
 			sLeft[LeftLen - 1] = 0;
 			Regex hRegex = CompileRegexWithError(sLeft[1], sLeft);
-			if(hRegex == INVALID_HANDLE)
+			if (hRegex == INVALID_HANDLE)
 			{
 				continue;
 			}
@@ -548,7 +548,7 @@ void LoadConfig()
 				g_RegexRules.Push(RuleList);
 			}
 		}
-		else if(!g_Rules.GetValue(sLeft, RuleList))
+		else if (!g_Rules.GetValue(sLeft, RuleList))
 		{
 			RuleList = new ArrayList();
 			g_Rules.SetValue(sLeft, RuleList);
@@ -556,7 +556,7 @@ void LoadConfig()
 		}
 
 		// Section
-		if(Config.GotoFirstSubKey(false))
+		if (Config.GotoFirstSubKey(false))
 		{
 			do
 			{
@@ -564,15 +564,15 @@ void LoadConfig()
 				Config.GetSectionName(sSection, sizeof(sSection));
 
 				int Mode = MODE_NONE;
-				if(strcmp(sSection, "deny", false) == 0)
+				if (strcmp(sSection, "deny", false) == 0)
 					Mode |= MODE_DENY;
-				else if(strcmp(sSection, "allow", false) == 0)
+				else if (strcmp(sSection, "allow", false) == 0)
 					Mode |= MODE_ALLOW;
-				else if(strcmp(sSection, "clamp", false) == 0)
+				else if (strcmp(sSection, "clamp", false) == 0)
 					Mode |= MODE_CLAMP;
 
 				// Section
-				if(Config.GotoFirstSubKey(false))
+				if (Config.GotoFirstSubKey(false))
 				{
 					StringMap Rule = new StringMap();
 					int RuleMode = MODE_NONE;
@@ -581,19 +581,19 @@ void LoadConfig()
 						static char sKey[128];
 						Config.GetSectionName(sKey, sizeof(sKey));
 
-						if(strcmp(sKey, "min", false) == 0)
+						if (strcmp(sKey, "min", false) == 0)
 						{
 							float Value = Config.GetFloat(NULL_STRING);
 							Rule.SetValue("minvalue", Value);
 							RuleMode |= MODE_MIN;
 						}
-						else if(strcmp(sKey, "max", false) == 0)
+						else if (strcmp(sKey, "max", false) == 0)
 						{
 							float Value = Config.GetFloat(NULL_STRING);
 							Rule.SetValue("maxvalue", Value);
 							RuleMode |= MODE_MAX;
 						}
-						else if(Mode & MODE_CLAMP)
+						else if (Mode & MODE_CLAMP)
 						{
 							float Value = Config.GetFloat(NULL_STRING);
 							Rule.SetValue("clampvalue", Value);
@@ -602,15 +602,15 @@ void LoadConfig()
 						else
 						{
 							StringMap Rule_ = new StringMap();
-							if(ParseRule(Config, sLeft, Mode, Rule_))
+							if (ParseRule(Config, sLeft, Mode, Rule_))
 								RuleList.Push(Rule_);
 							else
 								delete Rule_;
 						}
-					} while(Config.GotoNextKey(false));
+					} while (Config.GotoNextKey(false));
 					Config.GoBack();
 
-					if(RuleMode != MODE_NONE)
+					if (RuleMode != MODE_NONE)
 					{
 						Rule.SetValue("mode", Mode | RuleMode);
 						RuleList.Push(Rule);
@@ -622,28 +622,28 @@ void LoadConfig()
 				{
 					StringMap Rule = new StringMap();
 
-					if(ParseRule(Config, sLeft, Mode, Rule))
+					if (ParseRule(Config, sLeft, Mode, Rule))
 						RuleList.Push(Rule);
 					else
 						delete Rule;
 				}
 
-			} while(Config.GotoNextKey(false));
+			} while (Config.GotoNextKey(false));
 			Config.GoBack();
 		}
 		else // Value
 		{
 			StringMap Rule = new StringMap();
 
-			if(ParseRule(Config, sLeft, MODE_ALLOW, Rule))
+			if (ParseRule(Config, sLeft, MODE_ALLOW, Rule))
 				RuleList.Push(Rule);
 			else
 				delete Rule;
 		}
-	} while(Config.GotoNextKey(false));
+	} while (Config.GotoNextKey(false));
 	delete Config;
 
-	for(int i = 0; i < g_aRules.Length; i++)
+	for (int i = 0; i < g_aRules.Length; i++)
 	{
 		ArrayList RuleList = g_aRules.Get(i);
 		SortADTArrayCustom(RuleList, SortRuleList);
@@ -653,16 +653,16 @@ void LoadConfig()
 bool ParseRule(KeyValues Config, const char[] sLeft, int Mode, StringMap Rule)
 {
 	static char sValue[512];
-	if(Config.GetDataType(NULL_STRING) == KvData_String)
+	if (Config.GetDataType(NULL_STRING) == KvData_String)
 	{
 		Config.GetString(NULL_STRING, sValue, sizeof(sValue));
 
 		int ValueLen = strlen(sValue);
-		if(sValue[0] == '/' && sValue[ValueLen - 1] == '/')
+		if (sValue[0] == '/' && sValue[ValueLen - 1] == '/')
 		{
 			sValue[ValueLen - 1] = 0;
 			Regex hRegex = CompileRegexWithError(sValue[1], sLeft);
-			if(hRegex == INVALID_HANDLE)
+			if (hRegex == INVALID_HANDLE)
 			{
 				return false;
 			}
@@ -679,13 +679,13 @@ bool ParseRule(KeyValues Config, const char[] sLeft, int Mode, StringMap Rule)
 			Rule.SetString("value", sValue);
 		}
 	}
-	else if(Config.GetDataType(NULL_STRING) == KvData_Int)
+	else if (Config.GetDataType(NULL_STRING) == KvData_Int)
 	{
 		int Value = Config.GetNum(NULL_STRING);
 		Rule.SetValue("mode", Mode | MODE_INTVALUE);
 		Rule.SetValue("value", Value);
 	}
-	else if(Config.GetDataType(NULL_STRING) == KvData_Float)
+	else if (Config.GetDataType(NULL_STRING) == KvData_Float)
 	{
 		float Value = Config.GetFloat(NULL_STRING);
 		Rule.SetValue("mode", Mode | MODE_FLOATVALUE);
@@ -708,15 +708,15 @@ public int SortRuleList(int index1, int index2, Handle array, Handle hndl)
 	Rule2.GetValue("mode", Mode2);
 
 	// Deny should be first
-	if(Mode1 & MODE_DENY && !(Mode2 & MODE_DENY))
+	if (Mode1 & MODE_DENY && !(Mode2 & MODE_DENY))
 		return -1;
-	if(Mode2 & MODE_DENY && !(Mode1 & MODE_DENY))
+	if (Mode2 & MODE_DENY && !(Mode1 & MODE_DENY))
 		return 1;
 
 	// Clamp should be last
-	if(Mode1 & MODE_CLAMP && !(Mode2 & MODE_CLAMP))
+	if (Mode1 & MODE_CLAMP && !(Mode2 & MODE_CLAMP))
 		return 1;
-	if(Mode2 & MODE_CLAMP && !(Mode1 & MODE_CLAMP))
+	if (Mode2 & MODE_CLAMP && !(Mode1 & MODE_CLAMP))
 		return -1;
 
 	return 0;
@@ -734,7 +734,7 @@ MRESReturn HandleValidationAction(Action iAction, const char[] sCommand)
 	{
 		return MRES_Supercede;
 	}
-	else if(iAction == Plugin_Changed)
+	else if (iAction == Plugin_Changed)
 	{
 		// To avoid memory manipulation, better execute the command clamped
 		ServerCommand(sCommand);
@@ -866,7 +866,7 @@ Regex CompileRegexWithError(const char[] pattern, const char[] context)
 	Regex hRegex;
 	static char sError[512];
 	hRegex = CompileRegex(pattern, PCRE_CASELESS, sError, sizeof(sError));
-	if(hRegex == INVALID_HANDLE)
+	if (hRegex == INVALID_HANDLE)
 	{
 		LogError("Regex error in %s from %s", context, pattern);
 		LogError(sError);
