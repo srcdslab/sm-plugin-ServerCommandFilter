@@ -15,7 +15,7 @@ The plugin uses a configuration-driven rule system with support for allow/deny/c
 ### Core Technologies
 - **Language**: SourcePawn (.sp files)
 - **Platform**: SourceMod 1.11+ (minimum supported version)
-- **Build System**: SourceKnight (modern SourceMod build tool)
+- **Build System**: Native GitHub Actions CI (spcomp via rumblefrog/setup-sp)
 - **Target Game**: Counter-Strike: Source (CSS) - gamedata signatures provided
 - **Extensions Required**: DHooks, SDKTools, CSTools, Regex
 
@@ -26,14 +26,10 @@ The plugin uses a configuration-driven rule system with support for allow/deny/c
 - **GameData**: Custom signatures for CSS in `ServerCommandFilter.games.txt`
 
 ### Build Configuration
-The project uses SourceKnight with configuration in `sourceknight.yaml`:
-```yaml
-project:
-  sourceknight: 0.2
-  name: ServerCommandFilter
-  targets:
-    - ServerCommandFilter
-```
+The project builds via the `.github/workflows/ci.yml` GitHub Actions workflow, which installs
+the `UtilsHelper` include dependency, compiles `ServerCommandFilter.sp` with `spcomp`
+(SourceMod 1.12.x via `rumblefrog/setup-sp`), and packages the resulting `.smx` together with
+the `configs` and `gamedata` directories.
 
 ## Code Architecture & Patterns
 
@@ -131,12 +127,10 @@ g_aRules = new ArrayList();  // Create new one
 ## Development Workflow
 
 ### Building the Plugin
-```bash
-# Using SourceKnight (recommended)
-sourceknight build
-
-# Or via GitHub Actions - automatic on push/PR
-```
+Building is handled by GitHub Actions (`.github/workflows/ci.yml`), automatically on every
+push/PR. To build locally, install SourceMod 1.12.x, fetch the `UtilsHelper` include
+dependency into `addons/sourcemod/scripting/include`, and run `spcomp` against
+`ServerCommandFilter.sp`.
 
 ### Testing Changes
 1. **Local Testing**: Deploy to test server with SourceMod
