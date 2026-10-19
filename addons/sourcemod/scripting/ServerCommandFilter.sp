@@ -766,6 +766,7 @@ public MRESReturn Detour_SetValue(DHookParam hParams)
 	if (pVariant == Address_Null)
 		return MRES_Ignored;
 
+	// ScriptVariant_t: 8-byte value union, then int16 m_type (same layout on x86 and x86_64)
 	int iType = LoadFromAddress(pVariant + view_as<Address>(8), NumberType_Int16);
 	int iRawValue = LoadFromAddress(pVariant, NumberType_Int32);
 
@@ -783,11 +784,12 @@ public MRESReturn Detour_SetValue(DHookParam hParams)
 		}
 		case FIELD_CSTRING:
 		{
-			if (iRawValue == 0)
+			// m_pszString is a full pointer: 8 bytes on x86_64
+			Address pString = LoadAddressFromAddress(pVariant);
+			if (pString == Address_Null)
 				return MRES_Ignored; // Null string
 
 			char szStringValue[256];
-			Address pString = view_as<Address>(iRawValue);
 
 			bool bSuccess = false;
 			for (int i = 0; i < sizeof(szStringValue) - 1; i++)
