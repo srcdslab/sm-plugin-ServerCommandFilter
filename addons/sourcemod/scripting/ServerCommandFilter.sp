@@ -56,7 +56,7 @@ public Plugin myinfo =
 	name = "ServerCommandFilter",
 	author = "BotoX, .Rushaway, koen",
 	description = "Filters server commands using user-defined rules for maps (point_servercommand/VScript)",
-	version = "1.3.1",
+	version = "1.4.0",
 	url = "https://github.com/srcdslab/sm-plugin-ServerCommandFilter"
 };
 
