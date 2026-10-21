@@ -10,15 +10,15 @@
 #define COMMAND_SIZE 1024
 
 // bool CBaseEntity::AcceptInput( const char *szInputName, CBaseEntity *pActivator, CBaseEntity *pCaller, variant_t Value, int outputID )
-Handle g_hAcceptInput;
+DynamicHook g_hAcceptInput;
 
 // ScriptVariant_t field types (from debug)
 #define FIELD_FLOAT         1
 #define FIELD_INTEGER       5
 #define FIELD_CSTRING       30
 
-DHookSetup g_hSetValueDtr;
-DHookSetup g_hSendToServerConsoleDtr;
+DynamicDetour g_hSetValueDtr;
+DynamicDetour g_hSendToServerConsoleDtr;
 
 ConVar g_cvVerboseLog;
 int g_iVerboseLog;
@@ -56,21 +56,21 @@ public Plugin myinfo =
 	name = "ServerCommandFilter",
 	author = "BotoX, .Rushaway, koen",
 	description = "Filters server commands using user-defined rules for maps (point_servercommand/VScript)",
-	version = "1.3.1",
+	version = "1.3.2",
 	url = "https://github.com/srcdslab/sm-plugin-ServerCommandFilter"
 };
 
 public void OnPluginStart()
 {
-	Handle hGameConf = LoadGameConfigFile("sdktools.games");
-	if (hGameConf == INVALID_HANDLE)
+	GameData hGameConf = new GameData("sdktools.games");
+	if (hGameConf == null)
 	{
 		SetFailState("Couldn't load sdktools game config!");
 		return;
 	}
 
 	g_cvVerboseLog = CreateConVar("sm_scf_verbose", "2", "Verbosity level of logs \n0 = No logs \n1 = Denied: No rules/match \n2 = Denied: No rules/match + Clamped \n3 = Logs everything", _, true, 0.0, true, 3.0);
-	HookConVarChange(g_cvVerboseLog, OnConVarChanged);
+	g_cvVerboseLog.AddChangeHook(OnConVarChanged);
 
 	AutoExecConfig(true);
 
@@ -89,15 +89,15 @@ public void OnPluginStart()
 		delete gd;
 	}
 
-	int Offset = GameConfGetOffset(hGameConf, "AcceptInput");
-	g_hAcceptInput = DHookCreate(Offset, HookType_Entity, ReturnType_Bool, ThisPointer_CBaseEntity, AcceptInput);
-	DHookAddParam(g_hAcceptInput, HookParamType_CharPtr);
-	DHookAddParam(g_hAcceptInput, HookParamType_CBaseEntity);
-	DHookAddParam(g_hAcceptInput, HookParamType_CBaseEntity);
-	DHookAddParam(g_hAcceptInput, HookParamType_Object, 20, DHookPass_ByVal|DHookPass_ODTOR|DHookPass_OCTOR|DHookPass_OASSIGNOP); //varaint_t is a union of 12 (float[3]) plus two int type params 12 + 8 = 20
-	DHookAddParam(g_hAcceptInput, HookParamType_Int);
+	int Offset = hGameConf.GetOffset("AcceptInput");
+	g_hAcceptInput = new DynamicHook(Offset, HookType_Entity, ReturnType_Bool, ThisPointer_CBaseEntity);
+	g_hAcceptInput.AddParam(HookParamType_CharPtr);
+	g_hAcceptInput.AddParam(HookParamType_CBaseEntity);
+	g_hAcceptInput.AddParam(HookParamType_CBaseEntity);
+	g_hAcceptInput.AddParam(HookParamType_Object, 20, DHookPass_ByVal|DHookPass_ODTOR|DHookPass_OCTOR|DHookPass_OASSIGNOP); //varaint_t is a union of 12 (float[3]) plus two int type params 12 + 8 = 20
+	g_hAcceptInput.AddParam(HookParamType_Int);
 
-	CloseHandle(hGameConf);
+	delete hGameConf;
 
 	/* Late Load */
 	int entity = INVALID_ENT_REFERENCE;
@@ -111,13 +111,13 @@ public void OnPluginEnd()
 {
 	if (g_hSetValueDtr != null)
 	{
-		DHookDisableDetour(g_hSetValueDtr, false, Detour_SetValue);
+		g_hSetValueDtr.Disable(Hook_Pre, Detour_SetValue);
 		delete g_hSetValueDtr;
 	}
 
 	if (g_hSendToServerConsoleDtr != null)
 	{
-		DHookDisableDetour(g_hSendToServerConsoleDtr, false, Detour_SendToServerConsole);
+		g_hSendToServerConsoleDtr.Disable(Hook_Pre, Detour_SendToServerConsole);
 		delete g_hSendToServerConsoleDtr;
 	}
 }
@@ -130,7 +130,7 @@ void Generate_SetValueDetour(GameData gd)
 		return;
 	}
 
-	if (!DHookEnableDetour(g_hSetValueDtr, false, Detour_SetValue)) {
+	if (!g_hSetValueDtr.Enable(Hook_Pre, Detour_SetValue)) {
 		LogError("Failed to detour \"SetValue()\" function!");
 		return;
 	}
@@ -147,7 +147,7 @@ void Generate_SendToSvDetour(GameData gd)
 		return;
 	}
 
-	if (!DHookEnableDetour(g_hSendToServerConsoleDtr, false, Detour_SendToServerConsole))
+	if (!g_hSendToServerConsoleDtr.Enable(Hook_Pre, Detour_SendToServerConsole))
 	{
 		LogError("Failed to detour \"SendToServerConsole()\" function!");
 		return;
@@ -163,38 +163,38 @@ public void OnMapStart()
 
 public void OnConfigsExecuted()
 {
-	g_iVerboseLog = GetConVarInt(g_cvVerboseLog);
+	g_iVerboseLog = g_cvVerboseLog.IntValue;
 }
 
 void OnConVarChanged(ConVar convar, const char[] oldValue, const char[] newValue)
 {
-	g_iVerboseLog = GetConVarInt(g_cvVerboseLog);
+	g_iVerboseLog = g_cvVerboseLog.IntValue;
 }
 
 public void OnEntityCreated(int entity, const char[] classname)
 {
 	if (StrEqual(classname, "point_servercommand"))
 	{
-		DHookEntity(g_hAcceptInput, false, entity);
+		g_hAcceptInput.HookEntity(Hook_Pre, entity, AcceptInput);
 	}
 }
 
 // bool CBaseEntity::AcceptInput( const char *szInputName, CBaseEntity *pActivator, CBaseEntity *pCaller, variant_t Value, int outputID )
-public MRESReturn AcceptInput(int pThis, Handle hReturn, Handle hParams)
+public MRESReturn AcceptInput(int pThis, DHookReturn hReturn, DHookParam hParams)
 {
 	char szInputName[128];
-	DHookGetParamString(hParams, 1, szInputName, sizeof(szInputName));
+	hParams.GetString(1, szInputName, sizeof(szInputName));
 
 	if (!StrEqual(szInputName, "Command", true))
 		return MRES_Ignored;
 
 	int bReplaced = 0;
 	int client = 0;
-	if (!DHookIsNullParam(hParams, 2))
-		client = DHookGetParam(hParams, 2);
+	if (!hParams.IsNull(2))
+		client = hParams.Get(2);
 
 	char sCommand[COMMAND_SIZE];
-	DHookGetParamObjectPtrString(hParams, 4, 0, ObjectValueType_String, sCommand, sizeof(sCommand));
+	hParams.GetObjectVarString(4, 0, ObjectValueType_String, sCommand, sizeof(sCommand));
 
 	if (SanitizeSayCommand(sCommand, sizeof(sCommand)))
 		bReplaced = 1;
@@ -241,13 +241,13 @@ public MRESReturn AcceptInput(int pThis, Handle hReturn, Handle hParams)
 
 	if (iAction == Plugin_Stop)
 	{
-		DHookSetReturn(hReturn, false);
+		hReturn.Value = false;
 		return MRES_Supercede;
 	}
 	else if (iAction == Plugin_Changed || bReplaced)
 	{
 		ServerCommand("%s", sCommand);
-		DHookSetReturn(hReturn, true);
+		hReturn.Value = true;
 		return MRES_Supercede;
 	}
 
@@ -312,7 +312,7 @@ Action ValidateCommand(char[] sOrigCommand, const char[] sSource)
 	for (int i = 0; i < g_Regexes.Length; i++)
 	{
 		Regex hRegex = g_Regexes.Get(i);
-		if (MatchRegex(hRegex, sCommandLeft) > 0)
+		if (hRegex.Match(sCommandLeft) > 0)
 		{
 			RuleList = g_RegexRules.Get(i);
 			return MatchRuleList(RuleList, sOrigCommand, sCommandLeft, sCommandRight, sSource);
@@ -367,7 +367,7 @@ Action MatchRuleList(ArrayList RuleList, char[] sOrigCommand, const char[] sComm
 		{
 			Regex hRegex;
 			Rule.GetValue("value", hRegex);
-			if (MatchRegex(hRegex, sCommandRight) > 0)
+			if (hRegex.Match(sCommandRight) > 0)
 				State |= STATE_ALLOW;
 		}
 
@@ -537,7 +537,7 @@ void LoadConfig()
 		{
 			sLeft[LeftLen - 1] = 0;
 			Regex hRegex = CompileRegexWithError(sLeft[1], sLeft);
-			if (hRegex == INVALID_HANDLE)
+			if (hRegex == null)
 			{
 				continue;
 			}
@@ -662,7 +662,7 @@ bool ParseRule(KeyValues Config, const char[] sLeft, int Mode, StringMap Rule)
 		{
 			sValue[ValueLen - 1] = 0;
 			Regex hRegex = CompileRegexWithError(sValue[1], sLeft);
-			if (hRegex == INVALID_HANDLE)
+			if (hRegex == null)
 			{
 				return false;
 			}
@@ -697,10 +697,10 @@ bool ParseRule(KeyValues Config, const char[] sLeft, int Mode, StringMap Rule)
 	return true;
 }
 
-public int SortRuleList(int index1, int index2, Handle array, Handle hndl)
+public int SortRuleList(int index1, int index2, ArrayList array, Handle hndl)
 {
-	StringMap Rule1 = GetArrayCell(array, index1);
-	StringMap Rule2 = GetArrayCell(array, index2);
+	StringMap Rule1 = array.Get(index1);
+	StringMap Rule2 = array.Get(index2);
 
 	int Mode1;
 	int Mode2;
@@ -865,8 +865,8 @@ Regex CompileRegexWithError(const char[] pattern, const char[] context)
 {
 	Regex hRegex;
 	static char sError[512];
-	hRegex = CompileRegex(pattern, PCRE_CASELESS, sError, sizeof(sError));
-	if (hRegex == INVALID_HANDLE)
+	hRegex = new Regex(pattern, PCRE_CASELESS, sError, sizeof(sError));
+	if (hRegex == null)
 	{
 		LogError("Regex error in %s from %s", context, pattern);
 		LogError(sError);
