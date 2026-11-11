@@ -56,7 +56,7 @@ public Plugin myinfo =
 	name = "ServerCommandFilter",
 	author = "BotoX, .Rushaway, koen",
 	description = "Filters server commands using user-defined rules for maps (point_servercommand/VScript)",
-	version = "1.4.0",
+	version = "1.4.1",
 	url = "https://github.com/srcdslab/sm-plugin-ServerCommandFilter"
 };
 
@@ -784,8 +784,13 @@ public MRESReturn Detour_SetValue(DHookParam hParams)
 		}
 		case FIELD_CSTRING:
 		{
+#if SOURCEMOD_V_MAJOR == 1 && SOURCEMOD_V_MINOR < 13
+			// SM 1.12 has no LoadAddressFromAddress (x86 only): the pointer is 4 bytes
+			Address pString = view_as<Address>(iRawValue);
+#else
 			// m_pszString is a full pointer: 8 bytes on x86_64
 			Address pString = LoadAddressFromAddress(pVariant);
+#endif
 			if (pString == Address_Null)
 				return MRES_Ignored; // Null string
 
