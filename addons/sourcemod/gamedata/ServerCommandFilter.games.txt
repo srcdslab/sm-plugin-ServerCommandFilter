@@ -1,5 +1,20 @@
 "Games"
 {
+    "#default"
+    {
+        "Offsets"
+        {
+            // variant_t: 12-byte value union, CHandle eVal, fieldtype_t fieldType.
+            // On x86_64 the 8-byte string_t pads the union to 16 bytes.
+            "variant_t::fieldType"
+            {
+                "windows"       "16"
+                "linux"         "16"
+                "windows64"     "20"
+                "linux64"       "20"
+            }
+        }
+    }
     "cstrike"
     {
         "Signatures"
