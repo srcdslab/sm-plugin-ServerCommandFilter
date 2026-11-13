@@ -17,6 +17,13 @@ DynamicHook g_hAcceptInput;
 #define FIELD_INTEGER       5
 #define FIELD_CSTRING       30
 
+// variant_t field types (fieldtype_t)
+#define VARIANT_FIELD_VOID      0
+#define VARIANT_FIELD_STRING    2
+
+// Offset of variant_t::fieldType, from gamedata: 16 on x86, 20 on x86_64
+int g_iVariantTypeOffset = -1;
+
 DynamicDetour g_hSetValueDtr;
 DynamicDetour g_hSendToServerConsoleDtr;
 
@@ -56,7 +63,7 @@ public Plugin myinfo =
 	name = "ServerCommandFilter",
 	author = "BotoX, .Rushaway, koen",
 	description = "Filters server commands using user-defined rules for maps (point_servercommand/VScript)",
-	version = "1.4.1",
+	version = "1.4.2",
 	url = "https://github.com/srcdslab/sm-plugin-ServerCommandFilter"
 };
 
@@ -74,20 +81,27 @@ public void OnPluginStart()
 
 	AutoExecConfig(true);
 
-	// Gamedata only supports CS:S for now
-	EngineVersion iEngine = GetEngineVersion();
-	if (iEngine == Engine_CSS)
-	{
-		GameData gd = new GameData("ServerCommandFilter.games");
-		if (gd == null) {
-			SetFailState("Gamedata file not found or failed to load!");
-			return;
-		}
+	GameData gd = new GameData("ServerCommandFilter.games");
+	if (gd == null) {
+		SetFailState("Gamedata file not found or failed to load!");
+		return;
+	}
 
+	g_iVariantTypeOffset = gd.GetOffset("variant_t::fieldType");
+	if (g_iVariantTypeOffset == -1)
+	{
+		delete gd;
+		SetFailState("Failed to get variant_t::fieldType offset from gamedata");
+		return;
+	}
+
+	// Detour signatures only support CS:S for now
+	if (GetEngineVersion() == Engine_CSS)
+	{
 		Generate_SetValueDetour(gd);
 		Generate_SendToSvDetour(gd);
-		delete gd;
 	}
+	delete gd;
 
 	int Offset = hGameConf.GetOffset("AcceptInput");
 	g_hAcceptInput = new DynamicHook(Offset, HookType_Entity, ReturnType_Bool, ThisPointer_CBaseEntity);
@@ -192,6 +206,21 @@ public MRESReturn AcceptInput(int pThis, DHookReturn hReturn, DHookParam hParams
 	int client = 0;
 	if (!hParams.IsNull(2))
 		client = hParams.Get(2);
+
+	// Only a FIELD_STRING variant holds a string_t. On x86_64 string_t is 8 bytes but int/float
+	// values only fill 4, so reading any other variant as a string can follow a garbage pointer.
+	int iFieldType = hParams.GetObjectVar(4, g_iVariantTypeOffset, ObjectValueType_Int);
+	if (iFieldType == VARIANT_FIELD_VOID)
+		return MRES_Ignored; // Empty command: point_servercommand runs nothing
+
+	if (iFieldType != VARIANT_FIELD_STRING)
+	{
+		if (g_iVerboseLog >= 1)
+			LogMessage("Blocked point_servercommand Command input with a non-string value (field type %d)", iFieldType);
+
+		hReturn.Value = false;
+		return MRES_Supercede;
+	}
 
 	char sCommand[COMMAND_SIZE];
 	hParams.GetObjectVarString(4, 0, ObjectValueType_String, sCommand, sizeof(sCommand));
